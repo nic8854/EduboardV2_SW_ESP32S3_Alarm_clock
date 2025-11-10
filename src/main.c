@@ -8,6 +8,7 @@
 //    Hardware is included under components/eduboard2.
 //    Hardware support can be activated/deactivated in components/eduboard2/eduboard2_config.h
 /********************************************************************************************* */
+
 #include "eduboard2.h"
 #include "memon.h"
 
@@ -25,13 +26,27 @@ typedef struct {
 
 clockTime_t currentTime;
 
+#define SET_TIME_BIT        (1 << 0)  // bit 0
+#define SET_ALARM_BIT       (1 << 1)  // bit 1
+#define ALARM_ACTIVE_BIT    (1 << 2)  // bit 2
+#define SET_HOURS_BIT       (1 << 5)  // bit 5
+#define SET_MINUTES_BIT     (1 << 6)  // bit 6
+#define SET_SECONDS_BIT     (1 << 7)  // bit 7
+
+EventGroupHandle_t alarmClockEventGroup;
+
+
+
 void timeTask(void* param) {
     currentTime.hours = 0;
     currentTime.minutes = 0;
     currentTime.seconds = 0;
     vTaskDelay(100);
     for(;;) {
-        currentTime.seconds += rotary_encoder_get_rotation(true);
+        EventBits_t currentBits = xEventGroupGetBits(alarmClockEventGroup);
+        if((currentBits & SET_TIME_BIT) == 0) {
+            currentTime.seconds++;
+        }
         if(currentTime.seconds >= 60) {
             currentTime.seconds = 0;
             currentTime.minutes++;
@@ -69,56 +84,58 @@ typedef enum {
     SET_SECONDS
 } timesetMode_t;
 
-void buttonTask(void* param) {
-    bool_t timeSetState = SET_HOURS;
+void inputTask(void* param) {
+    bool timeSetState = SET_HOURS;
     timesetMode_t timeSetMode = 0;
     int32_t rotationChange = 0;
 
     for(;;) {
         // task main loop
-        if(rotary_encoder_button_get_state(true) == LONG_PRESSED) {
-            timeSetState != timeSetState;
+        if(rotary_encoder_button_get_state(false) == LONG_PRESSED) {
+            timeSetState = !timeSetState;
             if(timeSetState) {
-                led_set(LED0);
+                xEventGroupSetBits(alarmClockEventGroup, SET_TIME_BIT);
+                led_set(LED0, 1);
             } else {
-                led_reset(LED0);
+                xEventGroupClearBits(alarmClockEventGroup, SET_TIME_BIT);
+                led_set(LED0, 0);
             }
         }
         if(timeSetState) {
             switch(timeSetMode) {
                 case SET_HOURS: {
-                    if(rotary_encoder_button_get_state(true) == SHORT_PRESSED) {
+                    if(rotary_encoder_button_get_state(false) == SHORT_PRESSED) {
                         timeSetMode = SET_MINUTES;
                         ESP_LOGI(TAG, "mode = SET_MINUTES");
                         rotationChange = 0;
                         break;
                     } else {
-                        rotationChange += rotary_encoder_get_rotation(TRUE);
-                        ESP_LOGI(TAG, "rotation change --> %d", rotationChange);
+                        rotationChange += rotary_encoder_get_rotation(true);
+                        ESP_LOGI(TAG, "SET_HOURS change --> %d", rotationChange);
                         break;
                     }
                 }
                 case SET_MINUTES: {
-                    if(rotary_encoder_button_get_state(true) == SHORT_PRESSED) {
+                    if(rotary_encoder_button_get_state(false) == SHORT_PRESSED) {
                         timeSetMode = SET_SECONDS;
                         ESP_LOGI(TAG, "mode = SET_SECONDS");
                         rotationChange = 0;
                         break;
                     } else {
-                        rotationChange += rotary_encoder_get_rotation(TRUE);
-                        ESP_LOGI(TAG, "rotation change --> %d", rotationChange);
+                        rotationChange += rotary_encoder_get_rotation(true);
+                        ESP_LOGI(TAG, "SET_MINUTES change --> %d", rotationChange);
                         break;
                     }
                 }
                 case SET_SECONDS: {
-                    if(rotary_encoder_button_get_state(true) == SHORT_PRESSED) {
+                    if(rotary_encoder_button_get_state(false) == SHORT_PRESSED) {
                         timeSetMode = SET_HOURS;
                         ESP_LOGI(TAG, "mode = SET_HOURS");
                         rotationChange = 0;
                         break;
                     } else {
-                        rotationChange += rotary_encoder_get_rotation(TRUE);
-                        ESP_LOGI(TAG, "rotation change --> %d", rotationChange);
+                        rotationChange += rotary_encoder_get_rotation(true);
+                        ESP_LOGI(TAG, "SET_SECONDS change --> %d", rotationChange);
                         break;
                     }
                 }
@@ -126,7 +143,7 @@ void buttonTask(void* param) {
         } else {
             timeSetMode = SET_HOURS;
         }
-        led_toggle(LED7);
+        rotary_encoder_button_get_state(true);
         // delay
         vTaskDelay(50/portTICK_PERIOD_MS);
     }
@@ -137,10 +154,12 @@ void app_main()
 {
     //Initialize Eduboard2 BSP
     eduboard2_init();
+
+    alarmClockEventGroup = xEventGroupCreate();
     
     //Create timeTask
-    xTaskCreate(timeTask, "testTask", 2*2048, NULL, 10, NULL);
+    xTaskCreate(timeTask, "timeTask", 2*2048, NULL, 10, NULL);
     xTaskCreate(displayTask, "displayTask", 2*2048, NULL, 10, NULL);
-    xTaskCreate(buttonTask, "buttonTask", 2*2048, NULL, 10, NULL);
+    xTaskCreate(inputTask, "inputTask", 2*2048, NULL, 10, NULL);
     return;
 }
