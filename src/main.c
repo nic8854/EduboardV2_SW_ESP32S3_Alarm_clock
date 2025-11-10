@@ -150,6 +150,7 @@ void inputTask(void* param) {
                         led_set(LED1, 1);
                         timeSetMode = SET_MINUTES;
                         ESP_LOGI(TAG, "mode = SET_MINUTES");
+                        xQueueReset(rotationQueue);
                         rotationChange = 0;
                         break;
                     } else {
@@ -165,6 +166,7 @@ void inputTask(void* param) {
                         led_set(LED2, 1);
                         timeSetMode = SET_SECONDS;
                         ESP_LOGI(TAG, "mode = SET_SECONDS");
+                        xQueueReset(rotationQueue);
                         rotationChange = 0;
                         break;
                     } else {
@@ -180,6 +182,7 @@ void inputTask(void* param) {
                         led_set(LED2, 0);
                         timeSetMode = SET_HOURS;
                         ESP_LOGI(TAG, "mode = SET_HOURS");
+                        xQueueReset(rotationQueue);
                         rotationChange = 0;
                         break;
                     } else {
@@ -196,6 +199,9 @@ void inputTask(void* param) {
             }
         } else {
             xEventGroupSetBits(alarmClockEventGroup, SET_HOURS_BIT);
+            led_set(LED0, 0);
+            led_set(LED1, 0);
+            led_set(LED2, 0);
             timeSetMode = SET_HOURS;
         }
         rotary_encoder_button_get_state(true);
